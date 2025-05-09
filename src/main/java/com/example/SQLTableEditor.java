@@ -15,7 +15,7 @@ public class SQLTableEditor extends JFrame {
     private final String[] tableNames = {"customer", "flight", "hotel", "booking"}; // add your actual table names here
 
     public SQLTableEditor() {
-        setTitle("SQL Table Editor");
+        setTitle("Travel App");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(800, 500);
         setLayout(new BorderLayout());
@@ -34,10 +34,24 @@ public class SQLTableEditor extends JFrame {
         table = new JTable(model);
         add(new JScrollPane(table), BorderLayout.CENTER);
 
+        JPanel controlPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+
         // Update button
         JButton updateBtn = new JButton("Update DB");
         updateBtn.addActionListener(e -> updateDatabase());
-        add(updateBtn, BorderLayout.SOUTH);
+        controlPanel.add(updateBtn);
+
+        //Add Button
+        JButton addBtn = new JButton("Add Row");
+        addBtn.addActionListener(e -> insertNewRow());
+        controlPanel.add(addBtn);
+
+        JButton deleteBtn = new JButton("Delete");
+        deleteBtn.addActionListener(e -> deleteSelectedRow());
+        controlPanel.add(deleteBtn);
+
+        add(controlPanel, BorderLayout.SOUTH);
+
 
         connectAndLoadInitialTable();
     }
@@ -120,6 +134,38 @@ public class SQLTableEditor extends JFrame {
         return tableNames[0]; // fallback
     }
 
+    private void deleteSelectedRow() {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this, "No row selected to delete.");
+            return;
+        }
+
+        try {
+            String tableName = getSelectedTableName();
+            String idColumn = model.getColumnName(0);
+            Object idValue = model.getValueAt(selectedRow, 0);
+
+            if (idValue == null) {
+                model.removeRow(selectedRow);
+                return;
+            }
+
+            PreparedStatement stmt = conn.prepareStatement("DELETE FROM " + tableName + " WHERE " + idColumn + "=?");
+            stmt.setObject(1, idValue);
+            stmt.executeUpdate();
+
+            model.removeRow(selectedRow);
+            JOptionPane.showMessageDialog(this, "Row deleted.");
+        } catch (SQLException e) {
+            showError("Delete failed: " + e.getMessage());
+        }
+    }
+
+    private void insertNewRow() {
+
+    }
+    
     private void showError(String msg) {
         JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE);
     }
