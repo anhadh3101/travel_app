@@ -1,78 +1,127 @@
 package com.example;
 
 import javax.swing.*;
-import javax.swing.table.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
 import java.sql.*;
+import java.util.Arrays;
 
 public class SQLTableEditor extends JFrame {
     private JTable table;
     private DefaultTableModel model;
     private Connection conn;
+    private JPanel buttonPanel;
+    private final String[] tableNames = {"customer", "flight", "hotel", "booking"}; // add your actual table names here
 
     public SQLTableEditor() {
         setTitle("SQL Table Editor");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setSize(600, 400);
+        setSize(800, 500);
+        setLayout(new BorderLayout());
 
+        // Button panel for switching tables
+        buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        for (String tableName : tableNames) {
+            JButton btn = new JButton(tableName);
+            btn.addActionListener(e -> loadTable(tableName));
+            buttonPanel.add(btn);
+        }
+        add(buttonPanel, BorderLayout.NORTH);
+
+        // Table display
         model = new DefaultTableModel();
         table = new JTable(model);
-        JScrollPane scrollPane = new JScrollPane(table);
-        add(scrollPane, BorderLayout.CENTER);
+        add(new JScrollPane(table), BorderLayout.CENTER);
 
-        JButton updateButton = new JButton("Update DB");
-        add(updateButton, BorderLayout.SOUTH);
+        // Update button
+        JButton updateBtn = new JButton("Update DB");
+        updateBtn.addActionListener(e -> updateDatabase());
+        add(updateBtn, BorderLayout.SOUTH);
 
-        updateButton.addActionListener(e -> updateDatabase());
-
-        connectAndLoadData();
+        connectAndLoadInitialTable();
     }
 
-    private void connectAndLoadData() {
+    private void connectAndLoadInitialTable() {
         try {
-            conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/travel_planner", "admin", "mytravels");
+            conn = DriverManager.getConnection(
+                    "jdbc:mysql://localhost:3306/travel_planner", "admin", "mytravels");
+            loadTable(tableNames[0]); // load first table initially
+        } catch (SQLException e) {
+            showError("Connection failed: " + e.getMessage());
+        }
+    }
 
-            Statement stmt = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
-            ResultSet rs = stmt.executeQuery("SELECT * FROM customer");
+    private void loadTable(String tableName) {
+        model.setRowCount(0);
+        model.setColumnCount(0);
 
+        try {
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
             ResultSetMetaData meta = rs.getMetaData();
-            int columnCount = meta.getColumnCount();
 
-            // Add column names
-            for (int i = 1; i <= columnCount; i++) {
+            // Add columns
+            for (int i = 1; i <= meta.getColumnCount(); i++) {
                 model.addColumn(meta.getColumnName(i));
             }
 
             // Add rows
             while (rs.next()) {
-                Object[] row = new Object[columnCount];
-                for (int i = 1; i <= columnCount; i++) {
+                Object[] row = new Object[meta.getColumnCount()];
+                for (int i = 1; i <= meta.getColumnCount(); i++) {
                     row[i - 1] = rs.getObject(i);
                 }
                 model.addRow(row);
             }
 
+            table.setModel(model);
         } catch (SQLException e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage());
+            showError("Failed to load table '" + tableName + "': " + e.getMessage());
         }
     }
 
     private void updateDatabase() {
+        int colCount = model.getColumnCount();
+        if (colCount < 1) return;
+
         try {
+            String tableName = getSelectedTableName();
+            String idColumn = model.getColumnName(0); // Assumes first column is ID
+
             for (int i = 0; i < model.getRowCount(); i++) {
-                PreparedStatement stmt = conn.prepareStatement("UPDATE customer SET name=?, email=? WHERE customer_id=?");
-                stmt.setString(1, model.getValueAt(i, 1).toString());
-                stmt.setString(2, model.getValueAt(i, 2).toString());
-                stmt.setInt(3, Integer.parseInt(model.getValueAt(i, 0).toString()));
+                StringBuilder sql = new StringBuilder("UPDATE " + tableName + " SET ");
+                for (int j = 1; j < colCount; j++) {
+                    sql.append(model.getColumnName(j)).append("=?, ");
+                }
+                sql.setLength(sql.length() - 2); // Remove trailing comma
+                sql.append(" WHERE ").append(idColumn).append("=?");
+
+                PreparedStatement stmt = conn.prepareStatement(sql.toString());
+                for (int j = 1; j < colCount; j++) {
+                    stmt.setObject(j, model.getValueAt(i, j));
+                }
+                stmt.setObject(colCount, model.getValueAt(i, 0)); // where id=...
                 stmt.executeUpdate();
             }
-            JOptionPane.showMessageDialog(this, "Database updated successfully!");
+
+            JOptionPane.showMessageDialog(this, "Database updated.");
         } catch (SQLException e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Update failed: " + e.getMessage());
+            showError("Update failed: " + e.getMessage());
         }
+    }
+
+    private String getSelectedTableName() {
+        for (Component c : buttonPanel.getComponents()) {
+            if (c instanceof JButton btn && btn.hasFocus()) {
+                return btn.getText();
+            }
+        }
+        return tableNames[0]; // fallback
+    }
+
+    private void showError(String msg) {
+        JOptionPane.showMessageDialog(this, msg, "Error", JOptionPane.ERROR_MESSAGE);
     }
 
     public static void main(String[] args) {
