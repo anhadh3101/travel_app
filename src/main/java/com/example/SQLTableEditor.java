@@ -13,6 +13,7 @@ public class SQLTableEditor extends JFrame {
     private Connection conn;
     private JPanel buttonPanel;
     private final String[] tableNames = {"customer", "flight", "hotel", "booking"}; // add your actual table names here
+    private String currentTableName = "customer";
 
     public SQLTableEditor() {
         setTitle("Travel App");
@@ -67,6 +68,7 @@ public class SQLTableEditor extends JFrame {
     }
 
     private void loadTable(String tableName) {
+        currentTableName = tableName;
         model.setRowCount(0);
         model.setColumnCount(0);
 
@@ -110,7 +112,7 @@ public class SQLTableEditor extends JFrame {
                 }
                 sql.setLength(sql.length() - 2); // Remove trailing comma
                 sql.append(" WHERE ").append(idColumn).append("=?");
-
+                
                 PreparedStatement stmt = conn.prepareStatement(sql.toString());
                 for (int j = 1; j < colCount; j++) {
                     stmt.setObject(j, model.getValueAt(i, j));
@@ -126,12 +128,14 @@ public class SQLTableEditor extends JFrame {
     }
 
     private String getSelectedTableName() {
-        for (Component c : buttonPanel.getComponents()) {
-            if (c instanceof JButton btn && btn.hasFocus()) {
-                return btn.getText();
-            }
-        }
-        return tableNames[0]; // fallback
+        //for (Component c : buttonPanel.getComponents()) {
+          //  if (c instanceof JButton btn && btn.hasFocus()) {
+            //    return btn.getText();
+            //}
+        //}
+        //return tableNames[0]; // fallback
+        //commented old code incase needed to come back
+        return currentTableName;
     }
 
     private void deleteSelectedRow() {
@@ -163,7 +167,45 @@ public class SQLTableEditor extends JFrame {
     }
 
     private void insertNewRow() {
+        int colCount = model.getColumnCount();
+        if (colCount < 2) {
+            JOptionPane.showMessageDialog(this, "Cannot insert into this table.");
+            return;
+        }
 
+        String tableName = getSelectedTableName();
+
+        Object[] values = new Object[colCount - 1];
+        for (int i = 1; i < colCount; i++) {
+            String colName = model.getColumnName(i);
+            String input = JOptionPane.showInputDialog(this, "Enter value for " + colName + ":");
+            if (input == null) {
+                return; 
+            }
+            values[i - 1] = input;
+        }
+
+        StringBuilder sql = new StringBuilder("INSERT INTO " + tableName + " (");
+        for (int i = 1; i < colCount; i++) {
+            sql.append(model.getColumnName(i)).append(", ");
+        }
+        sql.setLength(sql.length() - 2); 
+        sql.append(") VALUES (");
+        sql.append("?,".repeat(colCount - 1));
+        sql.setLength(sql.length() - 1); 
+        sql.append(")");
+        
+        try (PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
+            for (int i = 0; i < values.length; i++) {
+                stmt.setObject(i + 1, values[i]);
+            }
+            stmt.executeUpdate();
+            JOptionPane.showMessageDialog(this, "Row inserted.");
+
+            loadTable(tableName); 
+        } catch (SQLException e) {
+            showError("Insert failed: " + e.getMessage());
+        }
     }
     
     private void showError(String msg) {
